@@ -3,7 +3,7 @@
 // ============================================================
 
 export const SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbysToetB8kTtJMiv4maOokGgbX2X0ItbQ4YLvESP9Gd16VxIggIrVJznqRzrh3R73dXcg/exec";
+  "https://script.google.com/macros/s/AKfycbzgAt_KCbqsw7HgXgJqAQY6jYrz6zI-gSKUk3-P5LLZpjUwQblF3k489DCByXsq1lCizQ/exec";
 
 // ── Generic GET request ──────────────────────────────────────
 async function call(action, payload = {}) {

@@ -1,7 +1,3 @@
-/* ═══════════════════════════════════════════════════════════════
-   🏪 DUKANDARPRO v5.0 — with Upgraded Thermal Receipt Slip
-   ═══════════════════════════════════════════════════════════════ */
-
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -23,7 +19,7 @@ const syncAllData   = (sp,sc,so,se,sst) => {
   });
 };
 
-/* field-name adapters */
+/* field-name adapters: Code.gs uses cost/price/pendingDues/date */
 const mapProduct  = p => ({ ...p, buy: p.cost  ?? p.buy  ?? 0, sell: p.price ?? p.sell ?? 0 });
 const mapCustomer = c => ({ ...c, udhaar: c.pendingDues ?? c.udhaar ?? 0 });
 const mapOrder    = o => ({ ...o, createdAt: o.date ?? o.createdAt ?? '', total: Number(o.total||0), profit: Number(o.profit||0) });
@@ -47,22 +43,23 @@ const processOfflineQueue   = ()                => api()?.processQueue() ?? Prom
 const getPendingSyncCount   = ()                => Promise.resolve((api()?.loadQueue() ?? []).length);
 const testConnection        = ()                => api()?.testConnection() ?? Promise.resolve({ success: false, error: 'DPApi not loaded' });
 
-/* ── Helpers ── */
-const rs      = n => `Rs. ${Number(n || 0).toLocaleString("en-PK")}`;
-const fmtDate = s => { try { return new Date(s).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" }); } catch { return s || ""; } };
-const fmtTime = s => { try { return new Date(s).toLocaleTimeString("en-PK", { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
-const fmtDT   = s => `${fmtDate(s)} ${fmtTime(s)}`;
-const today   = () => new Date().toISOString();
-const daysDiff = d => { const dd = new Date(d); const n = new Date(); return Math.ceil((dd - n) / (1000*60*60*24)); };
+/* ═══════════════════════════════════════════════════════════════
+   🏪 DUKANDARPRO v5.0 — Proper Bill Slip + JPEG Download
+   ═══════════════════════════════════════════════════════════════ */
+
+const rs       = n  => `Rs. ${Number(n || 0).toLocaleString("en-PK")}`;
+const fmtDate  = s  => { try { return new Date(s).toLocaleDateString("en-PK", { day:"numeric", month:"short", year:"numeric" }); } catch { return s||""; } };
+const fmtTime  = s  => { try { return new Date(s).toLocaleTimeString("en-PK", { hour:"2-digit", minute:"2-digit" }); } catch { return ""; } };
+const fmtDT    = s  => `${fmtDate(s)} ${fmtTime(s)}`;
+const today    = ()  => new Date().toISOString();
+const daysDiff = d  => { const dd = new Date(d); const n = new Date(); return Math.ceil((dd - n) / (1000*60*60*24)); };
 
 const loadFromStorage = (k, fb) => { try { return JSON.parse(localStorage.getItem(k)) || fb; } catch { return fb; } };
 const saveToStorage   = (k, v)  => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 
 const CATEGORIES = ["All","Grocery","Beverages","Household","Snacks","Cosmetics","Pharmacy"];
 
-/* ══════════════════════════════════════════════════════════
-   JPEG DOWNLOAD UTIL
-   ══════════════════════════════════════════════════════════ */
+/* ═══════════════════ JPEG DOWNLOAD UTIL ═══════════════════ */
 function loadHtml2Canvas() {
   return new Promise(resolve => {
     if (window.html2canvas) { resolve(window.html2canvas); return; }
@@ -73,288 +70,93 @@ function loadHtml2Canvas() {
   });
 }
 
-async function downloadSlipAsJpeg(el, filename = "receipt.jpg") {
+async function downloadSlipAsJpeg(ref, filename = "receipt.jpg") {
   const h2c = await loadHtml2Canvas();
-  const canvas = await h2c(el, {
+  const canvas = await h2c(ref, {
     backgroundColor: "#ffffff",
-    scale: 4,          // high-res for crisp thermal look
+    scale: 3,
     useCORS: true,
     logging: false,
-    width: el.offsetWidth,
-    windowWidth: el.offsetWidth,
   });
   const link = document.createElement("a");
   link.download = filename;
-  link.href = canvas.toDataURL("image/jpeg", 0.97);
+  link.href = canvas.toDataURL("image/jpeg", 0.95);
   link.click();
 }
 
-/* ══════════════════════════════════════════════════════════
-   ▸▸ UPGRADED THERMAL RECEIPT SLIP COMPONENT (from v5.1)
-      All styles are explicit inline so html2canvas captures them.
-   ══════════════════════════════════════════════════════════ */
-const ReceiptSlip = ({
-  order,
-  shopName    = "My Store",
-  shopPhone   = "",
-  shopAddress = "",
-  onClose,
-}) => {
-  const slipRef    = useRef(null);
-  const [busy, setBusy] = useState(false);
-
-  if (!order) return null;
+/* ═══════════════════ RECEIPT SLIP COMPONENT ═══════════════════ */
+const ReceiptSlip = ({ order, shopName = "My Store", shopPhone = "", shopAddress = "", onClose }) => {
+  const slipRef = useRef(null);
+  const [downloading, setDownloading] = useState(false);
 
   const handleDownload = async () => {
-    if (busy) return;
-    setBusy(true);
+    setDownloading(true);
     try {
       await downloadSlipAsJpeg(slipRef.current, `Receipt-${order.id}.jpg`);
     } catch (e) {
       alert("Download failed: " + e.message);
-    } finally {
-      setBusy(false);
     }
+    setDownloading(false);
   };
 
-  /* Computed totals */
-  const discAmt  = order.disc ?? order.discountAmount ?? 0;
-  const taxAmt   = order.taxAmount ?? 0;
-  const isCredit = order.status === "credit";
-
-  /* Inline styles — all explicit so html2canvas captures them */
-  const S = {
-    wrap: {
-      backgroundColor: "#ffffff",
-      fontFamily: "'Courier New', Courier, monospace",
-      color: "#111111",
-      width: "320px",
-      padding: "20px 16px 24px",
-      margin: "0 auto",
-    },
-    headerBlock: {
-      textAlign: "center",
-      paddingBottom: "12px",
-      marginBottom: "12px",
-      borderBottom: "2px dashed #999",
-    },
-    shopName: {
-      fontSize: "18px",
-      fontWeight: "900",
-      letterSpacing: "1px",
-      color: "#111",
-      marginBottom: "3px",
-      textTransform: "uppercase",
-    },
-    shopSub: {
-      fontSize: "11px",
-      color: "#555",
-      lineHeight: "1.6",
-    },
-    metaRow: {
-      display: "flex",
-      justifyContent: "space-between",
-      fontSize: "11px",
-      color: "#333",
-      marginBottom: "4px",
-    },
-    metaKey:   { fontWeight: "700", color: "#555" },
-    metaValue: { fontWeight: "600" },
-    invNum:    { fontWeight: "900", color: "#000" },
-    dashedDiv: { borderTop: "1px dashed #aaa", margin: "10px 0" },
-    solidDiv:  { borderTop: "1px solid #222",  margin: "10px 0" },
-    itemsHeader: {
-      display: "grid",
-      gridTemplateColumns: "1fr 32px 56px 60px",
-      gap: "0 4px",
-      fontSize: "9px",
-      fontWeight: "900",
-      color: "#555",
-      textTransform: "uppercase",
-      letterSpacing: "0.6px",
-      paddingBottom: "6px",
-      borderBottom: "1px solid #ccc",
-    },
-    itemRow: {
-      display: "grid",
-      gridTemplateColumns: "1fr 32px 56px 60px",
-      gap: "0 4px",
-      fontSize: "11px",
-      paddingTop: "6px",
-      paddingBottom: "6px",
-      borderBottom: "1px dotted #ddd",
-      alignItems: "start",
-    },
-    itemName:  { fontWeight: "700", lineHeight: "1.35", wordBreak: "break-word" },
-    itemDisc:  { fontSize: "9px", color: "#c00", marginTop: "2px" },
-    numCell:   { textAlign: "right", paddingTop: "1px" },
-    amtCell:   { textAlign: "right", fontWeight: "700", paddingTop: "1px" },
-    totalsBlock: { fontSize: "12px" },
-    totRow:    { display: "flex", justifyContent: "space-between", marginBottom: "4px" },
-    totLabel:  { color: "#555" },
-    totVal:    { fontWeight: "700" },
-    discVal:   { fontWeight: "700", color: "#c00" },
-    grandRow: {
-      display: "flex",
-      justifyContent: "space-between",
-      borderTop: "2px solid #111",
-      marginTop: "6px",
-      paddingTop: "8px",
-      fontSize: "15px",
-      fontWeight: "900",
-    },
-    grandAmt: { color: "#000" },
-    creditBlock: {
-      marginTop: "6px",
-      padding: "8px 10px",
-      backgroundColor: "#fff3f3",
-      border: "1px dashed #e00",
-      borderRadius: "4px",
-    },
-    creditRow: { display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "3px" },
-    creditLabel: { color: "#c00", fontWeight: "700" },
-    creditVal:   { color: "#c00", fontWeight: "900" },
-    dueNote:   { fontSize: "9px", textAlign: "right", color: "#c00", marginTop: "2px" },
-    statusWrap: { marginTop: "14px", textAlign: "center" },
-    statusBadge: (paid) => ({
-      display: "inline-block",
-      padding: "4px 20px",
-      borderRadius: "20px",
-      fontSize: "11px",
-      fontWeight: "900",
-      letterSpacing: "1px",
-      textTransform: "uppercase",
-      background: paid ? "#d1fae5" : "#fee2e2",
-      color:      paid ? "#065f46" : "#991b1b",
-      border: `1px solid ${paid ? "#6ee7b7" : "#fca5a5"}`,
-    }),
-    footerBlock: {
-      borderTop: "2px dashed #bbb",
-      marginTop: "16px",
-      paddingTop: "12px",
-      textAlign: "center",
-      fontSize: "10px",
-      color: "#888",
-      lineHeight: "1.9",
-    },
-    footerThank: { fontWeight: "800", fontSize: "11px", color: "#222", marginBottom: "2px" },
-    footerPowered: { marginTop: "8px", fontSize: "9px", color: "#ccc" },
-    barcodeWrap: { textAlign: "center", marginTop: "10px" },
-    barcodeText: { fontFamily: "'Libre Barcode 128', 'Courier New', monospace", fontSize: "28px", color: "#333", letterSpacing: "2px" },
-    barcodeNum:  { fontSize: "9px", color: "#aaa", letterSpacing: "0.5px", marginTop: "-4px" },
-  };
+  if (!order) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4"
-      style={{ fontFamily: "system-ui, sans-serif" }}
-    >
-      <div
-        style={{
-          backgroundColor: "#fff",
-          borderRadius: "20px 20px 0 0",
-          width: "100%",
-          maxWidth: "400px",
-          maxHeight: "95vh",
-          overflowY: "auto",
-          display: "flex",
-          flexDirection: "column",
-          boxShadow: "0 -8px 40px rgba(0,0,0,0.35)",
-        }}
-        className="sm:rounded-3xl"
-      >
-        {/* Action Header — NOT captured by html2canvas */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "16px 20px",
-          borderBottom: "1px solid #f0f0f0",
-          backgroundColor: "#fff",
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
-          borderRadius: "20px 20px 0 0",
-        }}>
-          <span style={{ fontWeight: "800", fontSize: "15px", color: "#111" }}>🧾 Sale Receipt</span>
-          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-            {/* Download JPEG */}
+    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4">
+      <div className="bg-white dark:bg-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-sm max-h-[95vh] overflow-y-auto shadow-2xl flex flex-col">
+
+        {/* Action header — NOT part of the printed slip */}
+        <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-t-3xl sticky top-0 z-10">
+          <h2 className="font-black text-slate-900 dark:text-white text-base">🧾 Sale Receipt</h2>
+          <div className="flex items-center gap-2">
             <button
               onClick={handleDownload}
-              disabled={busy}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "9px 18px",
-                background: busy ? "#9ca3af" : "linear-gradient(135deg, #10b981, #059669)",
-                color: "#fff",
-                border: "none",
-                borderRadius: "12px",
-                fontWeight: "800",
-                fontSize: "13px",
-                cursor: busy ? "not-allowed" : "pointer",
-                boxShadow: busy ? "none" : "0 4px 12px rgba(16,185,129,0.35)",
-                transition: "all 0.2s",
-              }}
+              disabled={downloading}
+              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl transition-all active:scale-95 disabled:opacity-60"
             >
-              {busy ? (
-                <><span style={{ display: "inline-block", animation: "spin 1s linear infinite" }}>⏳</span> Saving…</>
-              ) : (
-                <>⬇️ Download JPEG</>
-              )}
+              {downloading ? "⏳ Saving…" : "⬇️ Download JPEG"}
             </button>
-            {/* Close */}
-            <button
-              onClick={onClose}
-              style={{
-                width: "34px",
-                height: "34px",
-                borderRadius: "10px",
-                background: "#f3f4f6",
-                border: "none",
-                fontWeight: "700",
-                fontSize: "14px",
-                cursor: "pointer",
-                color: "#6b7280",
-              }}
-            >✕</button>
+            <button onClick={onClose} className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 text-sm font-bold">✕</button>
           </div>
         </div>
 
-        {/* ══ THE THERMAL SLIP — captured by html2canvas ══ */}
-        <div ref={slipRef} style={S.wrap}>
+        {/* ═══ THE SLIP — captured by html2canvas ═══ */}
+        <div ref={slipRef} style={{ backgroundColor: "#ffffff", fontFamily: "'Courier New', Courier, monospace", padding: "24px 20px", color: "#111111", minWidth: 320 }}>
 
-          {/* Store header */}
-          <div style={S.headerBlock}>
-            <div style={S.shopName}>🏪 {shopName}</div>
-            {shopAddress && <div style={S.shopSub}>{shopAddress}</div>}
-            {shopPhone   && <div style={S.shopSub}>📞 {shopPhone}</div>}
-            <div style={{ ...S.shopSub, marginTop: "6px", letterSpacing: "2px", fontSize: "10px", color: "#aaa" }}>
-              ━━━━━━━━━━━━━━━━━━━━━━━━━
-            </div>
+          {/* Store Header */}
+          <div style={{ textAlign: "center", borderBottom: "2px dashed #ccc", paddingBottom: 14, marginBottom: 14 }}>
+            <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: 1, color: "#059669" }}>🏪 {shopName}</div>
+            {shopAddress && <div style={{ fontSize: 11, color: "#555", marginTop: 3 }}>{shopAddress}</div>}
+            {shopPhone   && <div style={{ fontSize: 11, color: "#555" }}>📞 {shopPhone}</div>}
           </div>
 
           {/* Invoice meta */}
-          <div style={{ marginBottom: "10px" }}>
-            {[
-              ["Invoice #",  <span style={S.invNum}>{order.id}</span>],
-              ["Date",       fmtDT(order.createdAt)],
-              ["Customer",   order.customerName || "Walk-in"],
-              ["Payment",    (order.method || order.paymentMethod || "Cash").charAt(0).toUpperCase() + (order.method || order.paymentMethod || "Cash").slice(1)],
-              ["Cashier",    order.cashier || "Owner"],
-            ].map(([k, v]) => (
-              <div key={k} style={S.metaRow}>
-                <span style={S.metaKey}>{k}</span>
-                <span style={S.metaValue}>{v}</span>
-              </div>
-            ))}
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#444", marginBottom: 6 }}>
+            <span style={{ fontWeight: 700 }}>Invoice#</span>
+            <span style={{ fontWeight: 900, color: "#059669" }}>{order.id}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#444", marginBottom: 6 }}>
+            <span style={{ fontWeight: 700 }}>Date</span>
+            <span>{fmtDT(order.createdAt)}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#444", marginBottom: 6 }}>
+            <span style={{ fontWeight: 700 }}>Customer</span>
+            <span style={{ fontWeight: 700 }}>{order.customerName || "Walk-in"}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#444", marginBottom: 6 }}>
+            <span style={{ fontWeight: 700 }}>Payment</span>
+            <span style={{ textTransform: "capitalize" }}>{order.method || order.paymentMethod || "cash"}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#444", marginBottom: 6 }}>
+            <span style={{ fontWeight: 700 }}>Cashier</span>
+            <span>{order.cashier || "Owner"}</span>
           </div>
 
-          <div style={S.dashedDiv} />
+          {/* Divider */}
+          <div style={{ borderTop: "1px dashed #bbb", margin: "12px 0" }} />
 
-          {/* Items column headers */}
-          <div style={S.itemsHeader}>
+          {/* Column Headers */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: "0 6px", fontSize: 10, fontWeight: 900, color: "#444", paddingBottom: 6, borderBottom: "1px solid #ddd", textTransform: "uppercase", letterSpacing: 0.5 }}>
             <span>Item</span>
             <span style={{ textAlign: "right" }}>Qty</span>
             <span style={{ textAlign: "right" }}>Rate</span>
@@ -362,123 +164,94 @@ const ReceiptSlip = ({
           </div>
 
           {/* Items */}
-          {(order.items || []).map((item, i) => {
-            const unitPrice = item.sell ?? item.price ?? 0;
-            const lineAmt   = item.qty * unitPrice;
-            return (
-              <div key={i} style={S.itemRow}>
+          <div style={{ marginTop: 8 }}>
+            {(order.items || []).map((item, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: "0 6px", fontSize: 11, paddingBottom: 6, marginBottom: 6, borderBottom: "1px dotted #eee", alignItems: "start" }}>
                 <div>
-                  <div style={S.itemName}>{item.name}</div>
-                  {item.disc > 0 && <div style={S.itemDisc}>Disc: {rs(item.disc)}/pc</div>}
+                  <div style={{ fontWeight: 700, lineHeight: 1.3 }}>{item.name}</div>
+                  {item.disc > 0 && <div style={{ fontSize: 9, color: "#e11d48" }}>Disc: {rs(item.disc)}/pc</div>}
                 </div>
-                <div style={S.numCell}>{item.qty}</div>
-                <div style={S.numCell}>{rs(unitPrice)}</div>
-                <div style={S.amtCell}>{rs(lineAmt)}</div>
+                <div style={{ textAlign: "right", paddingTop: 1 }}>{item.qty}</div>
+                <div style={{ textAlign: "right", paddingTop: 1 }}>{rs(item.sell ?? item.price ?? 0)}</div>
+                <div style={{ textAlign: "right", fontWeight: 700, paddingTop: 1 }}>{rs(item.qty * (item.sell ?? item.price ?? 0))}</div>
               </div>
-            );
-          })}
-
-          <div style={{ ...S.dashedDiv, borderTopStyle: "double", borderTopWidth: "3px", borderColor: "#999" }} />
-
-          {/* Totals */}
-          <div style={S.totalsBlock}>
-            <div style={S.totRow}>
-              <span style={S.totLabel}>Subtotal</span>
-              <span style={S.totVal}>{rs(order.subtotal ?? order.total)}</span>
-            </div>
-            {discAmt > 0 && (
-              <div style={S.totRow}>
-                <span style={S.totLabel}>Discount</span>
-                <span style={S.discVal}>− {rs(discAmt)}</span>
-              </div>
-            )}
-            {taxAmt > 0 && (
-              <div style={S.totRow}>
-                <span style={S.totLabel}>Tax</span>
-                <span style={S.totVal}>{rs(taxAmt)}</span>
-              </div>
-            )}
-            <div style={S.grandRow}>
-              <span>TOTAL</span>
-              <span style={S.grandAmt}>{rs(order.total)}</span>
-            </div>
+            ))}
           </div>
 
-          {/* Credit block */}
-          {isCredit && (
-            <div style={S.creditBlock}>
-              <div style={S.creditRow}>
-                <span style={S.creditLabel}>Paid Now</span>
-                <span style={S.creditVal}>{rs(0)}</span>
-              </div>
-              <div style={S.creditRow}>
-                <span style={S.creditLabel}>Balance Due</span>
-                <span style={S.creditVal}>{rs(order.total)}</span>
-              </div>
-              {order.creditDueDate && (
-                <div style={S.dueNote}>Due by: {fmtDate(order.creditDueDate)}</div>
-              )}
+          {/* Divider */}
+          <div style={{ borderTop: "2px dashed #bbb", marginTop: 4, marginBottom: 10 }} />
+
+          {/* Totals block */}
+          <div style={{ fontSize: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+              <span style={{ color: "#555" }}>Subtotal</span>
+              <span style={{ fontWeight: 700 }}>{rs(order.subtotal)}</span>
             </div>
-          )}
+            {(order.disc || order.discountAmount || 0) > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, color: "#e11d48" }}>
+                <span>Discount</span>
+                <span style={{ fontWeight: 700 }}>− {rs(order.disc ?? order.discountAmount)}</span>
+              </div>
+            )}
+            {(order.taxAmount || 0) > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ color: "#555" }}>Tax</span>
+                <span style={{ fontWeight: 700 }}>{rs(order.taxAmount)}</span>
+              </div>
+            )}
+            {/* Grand Total */}
+            <div style={{ display: "flex", justifyContent: "space-between", borderTop: "2px solid #111", marginTop: 6, paddingTop: 8, fontSize: 16, fontWeight: 900 }}>
+              <span>TOTAL</span>
+              <span style={{ color: "#059669" }}>{rs(order.total)}</span>
+            </div>
+            {/* Paid / Due for credit */}
+            {order.status === "credit" && (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 12 }}>
+                  <span style={{ color: "#555" }}>Paid Now</span>
+                  <span style={{ fontWeight: 700 }}>{rs(0)}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 13 }}>
+                  <span style={{ color: "#e11d48", fontWeight: 700 }}>Balance Due</span>
+                  <span style={{ color: "#e11d48", fontWeight: 900 }}>{rs(order.total)}</span>
+                </div>
+                {order.udhaarAmt > 0 && order.creditDueDate && (
+                  <div style={{ fontSize: 10, textAlign: "right", color: "#e11d48", marginTop: 2 }}>Due by: {fmtDate(order.creditDueDate)}</div>
+                )}
+              </>
+            )}
+          </div>
 
           {/* Status badge */}
-          <div style={S.statusWrap}>
-            <span style={S.statusBadge(order.status === "paid")}>
-              {order.status === "paid" ? "✅ PAID" : order.status === "credit" ? "📒 CREDIT" : order.status?.toUpperCase()}
+          <div style={{ marginTop: 14, textAlign: "center" }}>
+            <span style={{ display: "inline-block", padding: "4px 16px", borderRadius: 20, fontSize: 11, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", background: order.status === "paid" ? "#d1fae5" : "#fee2e2", color: order.status === "paid" ? "#065f46" : "#991b1b", border: `1px solid ${order.status === "paid" ? "#6ee7b7" : "#fca5a5"}` }}>
+              {order.status === "paid" ? "✅ PAID" : order.status === "credit" ? "📒 CREDIT" : order.status.toUpperCase()}
             </span>
           </div>
 
-          {/* Barcode line */}
-          <div style={S.barcodeWrap}>
-            <div style={S.barcodeText}>||||| ||| || ||||| ||</div>
-            <div style={S.barcodeNum}>{order.id}</div>
-          </div>
-
           {/* Footer */}
-          <div style={S.footerBlock}>
-            <div style={S.footerThank}>Thank you for your purchase!</div>
+          <div style={{ borderTop: "2px dashed #ccc", marginTop: 16, paddingTop: 12, textAlign: "center", fontSize: 10, color: "#888", lineHeight: 1.8 }}>
+            <div style={{ fontWeight: 700, fontSize: 11, color: "#111", marginBottom: 4 }}>Thank you for your purchase!</div>
             <div>Items once sold are not returnable</div>
-            <div>without this receipt within 3 days.</div>
-            <div style={S.footerPowered}>★ Powered by DukanDar Pro v5.0 ★</div>
+            <div>without receipt within 3 days.</div>
+            <div style={{ marginTop: 8, fontSize: 9, color: "#bbb" }}>Powered by DukanDar Pro v5.0</div>
           </div>
 
         </div>
-        {/* end thermal slip */}
+        {/* end slip */}
 
         {/* Bottom close */}
-        <div style={{
-          padding: "16px",
-          borderTop: "1px solid #f0f0f0",
-          backgroundColor: "#fff",
-          borderRadius: "0 0 20px 20px",
-        }}>
-          <button
-            onClick={onClose}
-            style={{
-              width: "100%",
-              padding: "13px",
-              borderRadius: "12px",
-              background: "#f3f4f6",
-              border: "none",
-              fontWeight: "700",
-              fontSize: "14px",
-              color: "#374151",
-              cursor: "pointer",
-            }}
-          >
+        <div className="p-4 border-t border-slate-100 dark:border-slate-700">
+          <button onClick={onClose} className="w-full py-3 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-sm hover:bg-slate-200 transition-all">
             Close & Continue
           </button>
         </div>
       </div>
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 };
 
-/* ══════════════════════════════════════════════════════════
-   SYNC STATUS
-   ══════════════════════════════════════════════════════════ */
+/* ═══════════════════ SYNC STATUS ═══════════════════ */
 const SyncStatusIndicator = ({ pendingCount, isNetworkOnline, onSync, syncing }) => {
   const [showPopup, setShowPopup] = useState(false);
   if (pendingCount === 0 && isNetworkOnline) return null;
@@ -502,9 +275,7 @@ const SyncStatusIndicator = ({ pendingCount, isNetworkOnline, onSync, syncing })
   );
 };
 
-/* ══════════════════════════════════════════════════════════
-   UI COMPONENTS
-   ══════════════════════════════════════════════════════════ */
+/* ═══════════════════ UI COMPONENTS ═══════════════════ */
 const Badge = ({ color, children, size = "sm" }) => {
   const s = size === "lg" ? "px-3 py-1 text-sm" : "px-2.5 py-0.5 text-xs";
   const c = { green: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300", red: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300", amber: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300", blue: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300", violet: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300", gray: "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300", orange: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300" };
@@ -624,9 +395,7 @@ const TimelineItem = ({ icon, title, sub, time, color = "green" }) => {
   );
 };
 
-/* ══════════════════════════════════════════════════════════
-   DASHBOARD
-   ══════════════════════════════════════════════════════════ */
+/* ═══════════════════ DASHBOARD ═══════════════════ */
 const Dashboard = ({ products, orders, customers, expenses, lang, setPage, setExternalCustomer, setExternalCreditModal }) => {
   const L = lang === "ur";
   const safeProducts   = Array.isArray(products)   ? products   : [];
@@ -731,9 +500,7 @@ const Dashboard = ({ products, orders, customers, expenses, lang, setPage, setEx
   );
 };
 
-/* ══════════════════════════════════════════════════════════
-   POS (uses upgraded ReceiptSlip)
-   ══════════════════════════════════════════════════════════ */
+/* ═══════════════════ POS (with Bill Slip) ═══════════════════ */
 const POS = ({ products, customers, setOrders, setProducts, setCustomers, showToast, lang, shopInfo }) => {
   const [cart, setCart]                         = useState([]);
   const [search, setSearch]                     = useState("");
@@ -750,6 +517,7 @@ const POS = ({ products, customers, setOrders, setProducts, setCustomers, showTo
   const [showAddCustomer, setShowAddCustomer]   = useState(false);
   const [newCustForm, setNewCustForm]           = useState({ name:"", phone:"", email:"", addr:"" });
   const [savingCust, setSavingCust]             = useState(false);
+  /* ── receipt state ── */
   const [receiptOrder, setReceiptOrder]         = useState(null);
 
   const L              = lang === "ur";
@@ -829,6 +597,7 @@ const POS = ({ products, customers, setOrders, setProducts, setCustomers, showTo
       setOrders(prev => [order, ...prev]);
       setProducts(prev => prev.map(p => { const ci = cart.find(i => i.pid===p.id); return ci ? {...p, stock:Math.max(0,(p.stock||0)-ci.qty)} : p; }));
     } finally {
+      /* Show receipt slip */
       setReceiptOrder(order);
       setCart([]); setSelectedCustomer(null); setDiscount(0); setShowConfirm(false); setCreditDueDate(""); setIsProcessing(false);
     }
@@ -836,7 +605,8 @@ const POS = ({ products, customers, setOrders, setProducts, setCustomers, showTo
 
   return (
     <div className="flex flex-col pb-24">
-      {/* Upgraded receipt slip overlay */}
+
+      {/* Receipt slip overlay */}
       {receiptOrder && (
         <ReceiptSlip
           order={receiptOrder}
@@ -975,9 +745,7 @@ const POS = ({ products, customers, setOrders, setProducts, setCustomers, showTo
   );
 };
 
-/* ══════════════════════════════════════════════════════════
-   INVENTORY
-   ══════════════════════════════════════════════════════════ */
+/* ═══════════════════ INVENTORY ═══════════════════ */
 const Inventory = ({ products, setProducts, showToast, lang }) => {
   const [search, setSearch]               = useState("");
   const [activeCat, setActiveCat]         = useState("All");
@@ -1135,9 +903,7 @@ const Inventory = ({ products, setProducts, showToast, lang }) => {
   );
 };
 
-/* ══════════════════════════════════════════════════════════
-   ORDER HISTORY (uses upgraded ReceiptSlip for re-view)
-   ══════════════════════════════════════════════════════════ */
+/* ═══════════════════ ORDER HISTORY ═══════════════════ */
 const OrdersHistory = ({ orders, products, setOrders, setProducts, setCustomers, customers, showToast, lang }) => {
   const [search, setSearch]             = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -1148,6 +914,7 @@ const OrdersHistory = ({ orders, products, setOrders, setProducts, setCustomers,
   const [dateFrom, setDateFrom]         = useState("");
   const [dateTo, setDateTo]             = useState("");
   const [showConfirm, setShowConfirm]   = useState(false);
+  /* receipt re-view */
   const [viewReceipt, setViewReceipt]   = useState(null);
   const L = lang === "ur";
   const safeOrders    = Array.isArray(orders)    ? orders    : [];
@@ -1240,6 +1007,7 @@ const OrdersHistory = ({ orders, products, setOrders, setProducts, setCustomers,
                   {(o.disc||o.discountAmount||0)>0&&<div className="flex justify-between"><span className="text-slate-500">Discount</span><span className="text-red-500">-{rs(o.disc??o.discountAmount)}</span></div>}
                   <div className="flex justify-between font-bold border-t border-slate-200 dark:border-slate-600 pt-1 mt-1"><span>Total</span><span>{rs(o.total)}</span></div>
                 </div>
+                {/* Action buttons */}
                 <div className="flex gap-2">
                   <Btn variant="secondary" size="sm" onClick={() => setViewReceipt(o)} full>🧾 View Receipt</Btn>
                   {o.status!=="returned"&&<Btn variant="danger" size="sm" onClick={() => initReturn(o)} full>🔄 Return</Btn>}
@@ -1288,9 +1056,7 @@ const OrdersHistory = ({ orders, products, setOrders, setProducts, setCustomers,
   );
 };
 
-/* ══════════════════════════════════════════════════════════
-   CUSTOMERS
-   ══════════════════════════════════════════════════════════ */
+/* ═══════════════════ CUSTOMERS ═══════════════════ */
 const Customers = ({ customers, setCustomers, orders, showToast, lang, externalSelected, externalCreditModal, clearExternal }) => {
   const [search, setSearch]                     = useState("");
   const [selected, setSelected]                 = useState(externalSelected||null);
@@ -1527,9 +1293,7 @@ const Customers = ({ customers, setCustomers, orders, showToast, lang, externalS
   );
 };
 
-/* ══════════════════════════════════════════════════════════
-   MERCHANDISE
-   ══════════════════════════════════════════════════════════ */
+/* ═══════════════════ MERCHANDISE ═══════════════════ */
 const Merchandise = ({ products, orders, lang }) => {
   const [search, setSearch]       = useState("");
   const [activeCat, setActiveCat] = useState("All");
@@ -1616,9 +1380,7 @@ const Merchandise = ({ products, orders, lang }) => {
   );
 };
 
-/* ══════════════════════════════════════════════════════════
-   EXPENSES
-   ══════════════════════════════════════════════════════════ */
+/* ═══════════════════ EXPENSES ═══════════════════ */
 const Expenses = ({ expenses, setExpenses, showToast, lang }) => {
   const [showAdd, setShowAdd]         = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1670,9 +1432,7 @@ const Expenses = ({ expenses, setExpenses, showToast, lang }) => {
   );
 };
 
-/* ══════════════════════════════════════════════════════════
-   STAFF
-   ══════════════════════════════════════════════════════════ */
+/* ═══════════════════ STAFF ═══════════════════ */
 const Staff = ({ staff, setStaff, showToast, lang }) => {
   const [showAdd, setShowAdd]           = useState(false);
   const [editStaff, setEditStaff]       = useState(null);
@@ -1753,9 +1513,7 @@ const Staff = ({ staff, setStaff, showToast, lang }) => {
   );
 };
 
-/* ══════════════════════════════════════════════════════════
-   ANALYTICS
-   ══════════════════════════════════════════════════════════ */
+/* ═══════════════════ ANALYTICS ═══════════════════ */
 const Analytics = ({ orders, products, customers, expenses, lang }) => {
   const L = lang === "ur";
   const safeOrders    = Array.isArray(orders)    ? orders    : [];
@@ -1829,9 +1587,7 @@ const Analytics = ({ orders, products, customers, expenses, lang }) => {
   );
 };
 
-/* ══════════════════════════════════════════════════════════
-   SETTINGS
-   ══════════════════════════════════════════════════════════ */
+/* ═══════════════════ SETTINGS ═══════════════════ */
 const Settings = ({ lang, setLang, dark, setDark, showToast, shopInfo, setShopInfo }) => {
   const L = lang === "ur";
   const [syncPending, setSyncPending]   = useState(0);
@@ -1899,15 +1655,13 @@ const Settings = ({ lang, setLang, dark, setDark, showToast, shopInfo, setShopIn
       <div className="text-center py-6 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-2xl">
         <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mb-1">🏪 DukanDar Pro</div>
         <div className="text-sm text-slate-600 dark:text-slate-400">Complete Shop Management System</div>
-        <div className="text-xs text-slate-500 mt-1">v5.0 · Upgraded Thermal Receipt Slip</div>
+        <div className="text-xs text-slate-500 mt-1">v5.0 · Bill Slip + JPEG Download</div>
       </div>
     </div>
   );
 };
 
-/* ══════════════════════════════════════════════════════════
-   CREDIT REMINDER POPUP
-   ══════════════════════════════════════════════════════════ */
+/* ═══════════════════ CREDIT REMINDER POPUP ═══════════════════ */
 const CreditReminderPopup = ({ customers, setPage, setSelectedCustomer, showCreditModal, onDismiss }) => {
   const safeCustomers = Array.isArray(customers) ? customers : [];
   const overdue       = safeCustomers.filter(c=>(c.udhaar||0)>0&&c.creditDueDate&&daysDiff(c.creditDueDate)<=3);
@@ -1944,9 +1698,7 @@ const CreditReminderPopup = ({ customers, setPage, setSelectedCustomer, showCred
   );
 };
 
-/* ══════════════════════════════════════════════════════════
-   ROOT APP
-   ══════════════════════════════════════════════════════════ */
+/* ═══════════════════ ROOT APP ═══════════════════ */
 export default function DukanDarPro() {
   const [page, setPage]         = useState("home");
   const [lang, setLang]         = useState("en");

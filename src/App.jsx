@@ -1006,8 +1006,8 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 
 // ── Google Sheets Config ──────────────────────────────────────
-const SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbzgAt_KCbqsw7HgXgJqAQY6jYrz6zI-gSKUk3-P5LLZpjUwQblF3k489DCByXsq1lCizQ/exec";
+export const SCRIPT_URL =
+  "https://script.google.com/macros/s/AKfycbybNkhpXI6asH5z_vu-UWSoX4IbHkV-qPdtXA0JFIH3_DDjLhqcuGSf4o4c-UBhrNKS/exec";
 
 async function sheetsCall(action, payload = {}) {
   const body = JSON.stringify({ action, ...payload });

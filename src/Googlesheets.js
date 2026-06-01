@@ -153,13 +153,8 @@
 // ============================================================
 // googleSheets.js — FULL STABLE VERSION
 // ============================================================
-
-// ============================================================
-// googleSheets.js — FULL STABLE VERSION
-// ============================================================
-
 export const SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbwQOHWt5hTpfKMSKCV7n1rglhsg26HVwRg3gU_LgtfX0rgJ0J6dRIl-IhzdLUqAHeth/exec";
+  "https://script.google.com/macros/s/AKfycbybNkhpXI6asH5z_vu-UWSoX4IbHkV-qPdtXA0JFIH3_DDjLhqcuGSf4o4c-UBhrNKS/exec";
 
 // ============================================================
 // GENERIC API CALL
@@ -267,9 +262,9 @@ export const generateId = (prefix = "") =>
 export const todayDate = () =>
   new Date().toISOString().split("T")[0];
 
-// ==============================================================
+// ============================================================
 // PARTY HELPERS
-// ==============================================================
+// ============================================================
 
 export function partyToRow(p) {
   return [

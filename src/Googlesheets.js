@@ -1022,8 +1022,8 @@
 // }
 
 
-export const SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbwwlAd4NgXyV6sEQPDGGKt22na0pyqyQC2rM2UBUIlj5-my0bTP_RpgoprR_vS7iCGrQQ/exec";
+const API_URL =
+  "https://script.google.com/macros/s/AKfycbz7u-NbiaDaODDaPagdca-UQuOl_tTS0308ascxVOWVsOHGIny4jes7n6Mbat_vaF4psg/exec";
 
 // ============================================================
 // OFFLINE / SYNC CONFIG
@@ -1205,27 +1205,22 @@ export async function syncQueue(onProgress) {
 // NEW: FINANCIAL REPORT FUNCTIONS (server-computed)
 // ============================================================
 
-// Get monthly closing for all parties for a given month/year
 export async function getMonthlyClosing(month, year) {
   return callNetwork("getMonthlyClosing", { month, year });
 }
 
-// Save a monthly closing record
 export async function saveMonthlyClosing(record) {
   return callNetwork("saveMonthlyClosing", { record });
 }
 
-// Get live balance sheet (current balance for all parties)
 export async function getLiveBalanceSheet() {
   return callNetwork("getLiveBalanceSheet");
 }
 
-// Get daily report rows
 export async function getDailyReport(startDate, endDate) {
   return callNetwork("getDailyReport", { startDate: startDate || "", endDate: endDate || "" });
 }
 
-// Get month-end summary
 export async function getMonthSummary(month, year) {
   return callNetwork("getMonthSummary", { month, year });
 }
@@ -1257,14 +1252,46 @@ export function rowToItem([id, name, category, unit, rate, reorderLevel, stock])
     rate: Number(rate || 0), reorderLevel: Number(reorderLevel || 0), stock: Number(stock || 0) };
 }
 
-// ── Bill ──────────────────────────────────────────────────────
+// ── Bill ─────────────────────────────────────────────────────
+// Columns: id | partyId | partyName | date | billNo | items(JSON) |
+//          total | type | notes | discount | discountType | discountVal
+// IMPORTANT: Always keep backward-compatible: old rows (9 cols) won't
+// have cols 10-12, so we default them safely in rowToBill.
 export function billToRow(b) {
-  return [b.id, b.partyId, b.partyName, b.date, b.billNo,
-    JSON.stringify(b.items || []), Number(b.total || 0), b.type, b.notes || ""];
+  return [
+    b.id,
+    b.partyId,
+    b.partyName,
+    b.date,
+    b.billNo,
+    JSON.stringify(b.items || []),
+    Number(b.total || 0),
+    b.type,
+    b.notes || "",
+    Number(b.discount || 0),          // col 10 — discount amount (Rs)
+    b.discountType || "fixed",         // col 11 — "fixed" | "pct"
+    Number(b.discountVal || 0),        // col 12 — raw input value (amount or %)
+  ];
 }
-export function rowToBill([id, partyId, partyName, date, billNo, itemsJson, total, type, notes]) {
-  return { id, partyId, partyName, date, billNo,
-    items: JSON.parse(itemsJson || "[]"), total: Number(total || 0), type, notes };
+
+export function rowToBill(row) {
+  // Support both old 9-column rows and new 12-column rows
+  const [id, partyId, partyName, date, billNo, itemsJson, total, type, notes,
+         discount, discountType, discountVal] = row;
+  return {
+    id,
+    partyId,
+    partyName,
+    date,
+    billNo,
+    items       : (() => { try { return JSON.parse(itemsJson || "[]"); } catch { return []; } })(),
+    total       : Number(total || 0),
+    type,
+    notes       : notes || "",
+    discount    : Number(discount    || 0),
+    discountType: discountType       || "fixed",
+    discountVal : Number(discountVal || 0),
+  };
 }
 
 // ── Ledger ────────────────────────────────────────────────────
@@ -1306,9 +1333,9 @@ export function rowToMonthlyClosing([id, partyId, partyName, month, year, openin
     id, partyId, partyName,
     month: Number(month), year: Number(year),
     openingBalance: Number(openingBalance || 0),
-    totalSales: Number(totalSales || 0),
-    totalPayments: Number(totalPayments || 0),
-    totalDiscount: Number(totalDiscount || 0),
+    totalSales    : Number(totalSales     || 0),
+    totalPayments : Number(totalPayments  || 0),
+    totalDiscount : Number(totalDiscount  || 0),
     closingBalance: Number(closingBalance || 0),
     status, lastUpdated,
   };

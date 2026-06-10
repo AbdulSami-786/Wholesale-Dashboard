@@ -1021,7 +1021,6 @@
 //   return callNetwork("getSharedLedgerData", { slug });
 // }
 
-
 const API_URL =
   "https://script.google.com/macros/s/AKfycbz7u-NbiaDaODDaPagdca-UQuOl_tTS0308ascxVOWVsOHGIny4jes7n6Mbat_vaF4psg/exec";
 
@@ -1116,7 +1115,7 @@ function applyQueueToCache(sheet, rows) {
 
 async function callNetwork(action, payload = {}) {
   const body = JSON.stringify({ action, ...payload });
-  const url  = `${SCRIPT_URL}?payload=${encodeURIComponent(body)}`;
+  const url  = `${API_URL}?payload=${encodeURIComponent(body)}`; // ✅ FIXED: was SCRIPT_URL
   const response = await fetch(url, { method: "GET" });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const json = await response.json();
@@ -1202,7 +1201,7 @@ export async function syncQueue(onProgress) {
 }
 
 // ============================================================
-// NEW: FINANCIAL REPORT FUNCTIONS (server-computed)
+// FINANCIAL REPORT FUNCTIONS (server-computed)
 // ============================================================
 
 export async function getMonthlyClosing(month, year) {
@@ -1255,8 +1254,6 @@ export function rowToItem([id, name, category, unit, rate, reorderLevel, stock])
 // ── Bill ─────────────────────────────────────────────────────
 // Columns: id | partyId | partyName | date | billNo | items(JSON) |
 //          total | type | notes | discount | discountType | discountVal
-// IMPORTANT: Always keep backward-compatible: old rows (9 cols) won't
-// have cols 10-12, so we default them safely in rowToBill.
 export function billToRow(b) {
   return [
     b.id,
@@ -1268,14 +1265,13 @@ export function billToRow(b) {
     Number(b.total || 0),
     b.type,
     b.notes || "",
-    Number(b.discount || 0),          // col 10 — discount amount (Rs)
-    b.discountType || "fixed",         // col 11 — "fixed" | "pct"
-    Number(b.discountVal || 0),        // col 12 — raw input value (amount or %)
+    Number(b.discount || 0),
+    b.discountType || "fixed",
+    Number(b.discountVal || 0),
   ];
 }
 
 export function rowToBill(row) {
-  // Support both old 9-column rows and new 12-column rows
   const [id, partyId, partyName, date, billNo, itemsJson, total, type, notes,
          discount, discountType, discountVal] = row;
   return {

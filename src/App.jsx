@@ -7574,6 +7574,7 @@ function SharedLedgerViewPage({ slug, authInfo }) {
   const [error,        setError]        = useState("");
   const [activeTab,    setActiveTab]    = useState("ledger");
   const [viewingBill,  setViewingBill]  = useState(null);
+  const [allBills,     setAllBills]     = useState([]);
 
   useEffect(() => {
     async function load() {
@@ -7586,6 +7587,10 @@ function SharedLedgerViewPage({ slug, authInfo }) {
       setLoading(false);
     }
     load();
+    // Bills aren't reliably returned by the shared-ledger backend action, so
+    // fetch them the same way the admin dashboard does and match them to this
+    // party's ledger entries locally (entry.ref === bill.billNo).
+    getSheet("Bills").then(rows => setAllBills(rows.map(rowToBill))).catch(() => {});
   }, [slug]);
 
   if (loading) return (
@@ -7611,7 +7616,12 @@ function SharedLedgerViewPage({ slug, authInfo }) {
   const totalDebit  = data.entries.filter(e=>e.type==="debit" ).reduce((s,e)=>s+e.amount,0);
   const totalCredit = data.entries.filter(e=>e.type==="credit").reduce((s,e)=>s+e.amount,0);
   const balance     = data.openingBalance + totalDebit - totalCredit;
-  const partyBills  = data.bills || [];
+  const entryRefs   = new Set(data.entries.map(e=>e.ref).filter(Boolean));
+  const partyBills  = allBills.filter(b=>entryRefs.has(b.billNo) || entryRefs.has(b.id));
+  function findBillByRef(entry) {
+    if(!entry.ref) return null;
+    return allBills.find(b=>b.billNo===entry.ref || b.id===entry.ref) || null;
+  }
 
   return (
     <div style={{minHeight:"100vh",background:"#F8F9FA",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -7662,6 +7672,10 @@ function SharedLedgerViewPage({ slug, authInfo }) {
               {key:"type",    label:"Type",       render:v=><Badge color={v==="debit"?"red":"green"}>{v==="debit"?"Dr":"Cr"}</Badge>},
               {key:"amount",  label:"Amount",     right:true, render:(v,row)=><span style={{color:row.type==="debit"?COLORS.danger:COLORS.primary,fontWeight:700}}>{fmt(v)}</span>},
               {key:"running", label:"Balance",    right:true, bold:true, render:v=>fmt(v)},
+              {key:"id", label:"Actions", render:(_,row)=>{
+                const linkedBill = findBillByRef(row);
+                return linkedBill ? <Btn size="sm" variant="info" onClick={()=>setViewingBill(linkedBill)}>📄 Bill</Btn> : null;
+              }},
             ]} data={withRunning} />
           </div>
         )}
